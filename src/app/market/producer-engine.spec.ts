@@ -48,14 +48,22 @@ const settings = (patch: Partial<ProducerSettings> = {}): ProducerSettings => ({
 });
 
 describe('producer engine (worker logic)', () => {
-  let wasm: FakeWasm;
+  let wasm: FakeWasm; // the first instance; later ones are created on demand
+  let instances: FakeWasm[];
   let events: ProducerEvent[];
 
   beforeEach(() => {
     vi.useFakeTimers();
     wasm = new FakeWasm();
+    instances = [];
     events = [];
   });
+
+  const instantiate = () => {
+    const next = instances.length === 0 ? wasm : new FakeWasm();
+    instances.push(next);
+    return Promise.resolve(next);
+  };
   afterEach(() => vi.useRealTimers());
 
   const snapshots = (runId?: number) =>
@@ -67,7 +75,7 @@ describe('producer engine (worker logic)', () => {
 
   /** Engine with Wasm already loaded; `send` waits until the command has been applied. */
   const loaded = () => {
-    const engine = createProducerEngine(Promise.resolve(wasm), (e) => events.push(structuredClone(e)), () => 1);
+    const engine = createProducerEngine(instantiate, (e) => events.push(structuredClone(e)), () => 1);
     return (cmd: ProducerCommand) => engine.dispatch(cmd);
   };
 
@@ -124,6 +132,7 @@ describe('producer engine (worker logic)', () => {
     await send({ type: 'start', runId: 2, settings: settings({ instrumentCount: 3 }) });
 
     expect(wasm.freed).toEqual([1]);
+    expect(instances).toHaveLength(1); // healthy runs share one instance
     expect(lastSnapshot()).toMatchObject({ runId: 2, totalUpdates: 10 });
     expect(lastSnapshot().stats).toHaveLength(3);
 
@@ -144,7 +153,7 @@ describe('producer engine (worker logic)', () => {
   describe('while Wasm is loading', () => {
     it('queues commands and applies them in order once loaded', async () => {
       const load = deferred<ProducerExports>();
-      const engine = createProducerEngine(load.promise, (e) => events.push(e), () => 1);
+      const engine = createProducerEngine(() => load.promise, (e) => events.push(e), () => 1);
       engine.dispatch({ type: 'start', runId: 1, settings: settings() });
       engine.dispatch({ type: 'start', runId: 2, settings: settings() });
       const done = engine.dispatch({ type: 'pause', runId: 2 });
@@ -161,13 +170,18 @@ describe('producer engine (worker logic)', () => {
       expect(events.at(-1)).toMatchObject({ type: 'snapshot', runId: 2 });
     });
 
-    it('reports a load failure for each run', async () => {
+    it('reports a load failure and retries loading on the next start', async () => {
       const load = deferred<ProducerExports>();
-      const engine = createProducerEngine(load.promise, (e) => events.push(e));
+      const loads = vi.fn().mockReturnValueOnce(load.promise).mockResolvedValueOnce(wasm);
+      const engine = createProducerEngine(loads, (e) => events.push(e), () => 1);
       const done = engine.dispatch({ type: 'start', runId: 1, settings: settings() });
       load.reject(new Error('Could not load producer.wasm (HTTP 404)'));
       await done;
       expect(events).toEqual([{ type: 'error', runId: 1, message: 'Could not load producer.wasm (HTTP 404)' }]);
+
+      await engine.dispatch({ type: 'start', runId: 2, settings: settings() });
+      expect(loads).toHaveBeenCalledTimes(2);
+      expect(events.at(-1)).toMatchObject({ type: 'snapshot', runId: 2 });
     });
   });
 
@@ -178,8 +192,8 @@ describe('producer engine (worker logic)', () => {
       await send({ type: 'start', runId: 1, settings: settings() });
       expect(events).toEqual([{ type: 'error', runId: 1, message: 'unreachable executed' }]);
 
-      wasm.failNew = false;
       await send({ type: 'start', runId: 2, settings: settings() });
+      expect(instances).toHaveLength(2);
       expect(lastSnapshot()).toMatchObject({ runId: 2, totalUpdates: 10 });
     });
 
@@ -211,10 +225,42 @@ describe('producer engine (worker logic)', () => {
       await send({ type: 'resume', runId: 1 });
       expect(wasm.generateCalls).toBe(3);
 
-      wasm.failGenerateOnCall = Infinity;
       await send({ type: 'start', runId: 2, settings: settings() });
       vi.advanceTimersByTime(100);
       expect(snapshots(2)).toHaveLength(2);
+    });
+
+    it('discards the trapped Wasm instance and runs the next start on a fresh one', async () => {
+      const send = loaded();
+      wasm.failGenerateOnCall = 2;
+      await send({ type: 'start', runId: 1, settings: settings() });
+      vi.advanceTimersByTime(100);
+      expect(events.at(-1)).toMatchObject({ type: 'error', runId: 1 });
+
+      await send({ type: 'start', runId: 2, settings: settings() });
+      vi.advanceTimersByTime(300);
+
+      expect(instances).toHaveLength(2);
+      const [trapped, fresh] = instances;
+      expect(trapped.generateCalls).toBe(2); // never touched again…
+      expect(trapped.freed).toEqual([]); // …not even to free into untrusted memory
+      expect(fresh.generateCalls).toBe(4);
+      expect(lastSnapshot()).toMatchObject({ runId: 2, totalUpdates: 40 });
+    });
+
+    it('repeated failures never accumulate generators in a live instance', async () => {
+      const send = loaded();
+      for (let run = 1; run <= 20; run++) {
+        await send({ type: 'start', runId: run, settings: settings() });
+        instances.at(-1)!.failGenerateOnCall = 0; // next batch traps
+        vi.advanceTimersByTime(100);
+        expect(events.at(-1)).toMatchObject({ type: 'error', runId: run });
+      }
+      await send({ type: 'start', runId: 21, settings: settings() });
+
+      expect(instances).toHaveLength(21); // one instance per failed run, each dropped whole
+      expect(instances.at(-1)!.generateCalls).toBe(1);
+      expect(lastSnapshot()).toMatchObject({ runId: 21, totalUpdates: 10 });
     });
   });
 });

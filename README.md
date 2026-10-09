@@ -52,7 +52,7 @@ npm start          # builds the Wasm module, then `ng serve` on http://localhost
 - **Runs and staleness.** Each Apply increments `runId`. The worker tags every message with it; the store ignores anything from an older run, and the worker ignores pause/resume for a replaced run.
 - **Pause/resume** clears / restarts the interval — no catch-up for the paused period; totals are untouched.
 - **One producer for the app lifetime.** `MarketDataStore` is `providedIn: 'root'`, so route changes never create another worker. Applying a run frees the previous Wasm generator (`producer_free`); the worker is terminated when the app is destroyed.
-- **Errors** (Wasm unsupported / fetch failed / trap in `producer_new` or in any periodic batch / worker crash) stop the run's timer and surface as a status + alert banner. Commands are queued in arrival order (also while Wasm is loading); a failing command never blocks the next one, so Apply always recovers.
+- **Errors** (Wasm unsupported / fetch failed / trap in `producer_new` or in any periodic batch / worker crash) stop the run's timer and surface as a status + alert banner. Commands are queued in arrival order (also while Wasm is loading); a failing command never blocks the next one, so Apply always recovers. After a failure the whole Wasm instance is discarded (a trapped instance isn't trusted, so its generator isn't freed — dropping the instance releases all its memory); the next Apply instantiates a fresh one from the cached compiled `WebAssembly.Module`. A failed download isn't cached, so Apply also retries the load.
 - **Worker logic lives in `producer-engine.ts`**, free of worker globals; `producer.worker.ts` only loads Wasm and wires `postMessage`. This lets the real pause/resume/error behaviour be tested with fake timers and a controllable Wasm load.
 - The worker is injected through the `PRODUCER_WORKER` token, so store tests drive it with a fake worker — no real timers or waits.
 
@@ -62,7 +62,7 @@ At max settings (50 instruments, 1000 updates / 50 ms ≈ 20 000 updates/s) the 
 
 - `src/app/market/metrics.spec.ts` — worked example, zero denominators, one-sided book, instrument isolation, accumulation across batches.
 - `src/app/settings/settings.spec.ts` — range / integer / required validation; editing doesn't affect the producer; Apply sends new settings; invalid form isn't applied.
-- `src/app/market/producer-engine.spec.ts` — the actual worker logic with fake timers and a fake Wasm module: one batch per interval, pause stops generation, resume preserves totals with no catch-up, commands queued during Wasm loading apply in order, old runs are freed / ignored, load failure, failing start and failing periodic batch are reported and the next Apply recovers.
+- `src/app/market/producer-engine.spec.ts` — the actual worker logic with fake timers and a fake Wasm module: one batch per interval, pause stops generation, resume preserves totals with no catch-up, commands queued during Wasm loading apply in order, old runs are freed / ignored, load failure is retried, failing start / periodic batch are reported, the trapped Wasm instance is replaced (never reused or freed) and repeated failures don't accumulate generators.
 - `src/app/market/market-data.store.spec.ts` — pause/resume, values preserved, Apply resets and restarts when paused, stale-run results rejected, single worker, cleanup.
 - `wasm/producer/src/lib.rs` (`cargo test`) — batch sizes, value invariants over 200k updates, price continuity, determinism, FFI null handling.
 

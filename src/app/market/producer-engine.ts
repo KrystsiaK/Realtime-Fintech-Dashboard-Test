@@ -15,9 +15,12 @@ const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e)
  * The worker's logic, free of worker globals so it can be tested with fake timers and a fake Wasm module.
  * `dispatch` applies commands strictly in arrival order, even while Wasm is still loading,
  * and a failing command never blocks the ones after it.
+ *
+ * `instantiate` creates a fresh Wasm instance. One instance is reused across runs; after any failure
+ * the whole instance is discarded (with everything it allocated) and the next start gets a new one.
  */
 export function createProducerEngine(
-  wasm: Promise<ProducerExports>,
+  instantiate: () => Promise<ProducerExports>,
   post: (event: ProducerEvent) => void,
   seed: () => number = () => crypto.getRandomValues(new Uint32Array(1))[0],
 ) {
@@ -28,16 +31,21 @@ export function createProducerEngine(
   let intervalMs = 0;
   let stats: InstrumentStats[] = [];
   let totalUpdates = 0;
+  let instance: Promise<ProducerExports> | undefined;
 
   function stop(): void {
     clearInterval(timer);
     timer = undefined;
   }
 
-  /** Stops the run for good. The handle is dropped, not freed: after a trap the instance isn't trusted. */
+  /**
+   * Stops the run for good and discards the Wasm instance: after a trap its memory can't be trusted
+   * (so no `producer_free`), and dropping the instance releases everything it allocated.
+   */
   function fail(id: number, e: unknown): void {
     stop();
     handle = 0;
+    instance = undefined;
     post({ type: 'error', runId: id, message: errorMessage(e) });
   }
 
@@ -61,7 +69,8 @@ export function createProducerEngine(
   }
 
   async function handle_(cmd: ProducerCommand): Promise<void> {
-    const ex = await wasm;
+    if (cmd.type !== 'start' && (cmd.runId !== runId || !handle)) return; // replaced or failed run
+    const ex = await (instance ??= instantiate());
 
     if (cmd.type === 'start') {
       stop();
@@ -77,8 +86,6 @@ export function createProducerEngine(
       totalUpdates = 0;
       post({ type: 'started', runId });
       run(ex);
-    } else if (cmd.runId !== runId || !handle) {
-      return; // command for a replaced or failed run
     } else if (cmd.type === 'pause') {
       stop();
     } else if (cmd.type === 'resume' && timer === undefined) {
