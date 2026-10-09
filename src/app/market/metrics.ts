@@ -2,7 +2,7 @@
 export const FIELDS = 7;
 
 /**
- * Running per-instrument state. Only what the metrics need is kept — never the event history.
+ * Running per-instrument state. Only what the metrics need is kept, not the event history.
  * Prices are integer cents; `null` means "no data yet".
  */
 export interface InstrumentStats {
@@ -12,7 +12,7 @@ export interface InstrumentStats {
   bidQty: number | null;
   askQty: number | null;
   volume: number;
-  /** sum(priceCents × quantity). Exact as an integer up to 2^53 (~9e13 dollars traded). */
+  /** sum(priceCents * quantity). Exact as an integer up to 2^53 (~9e13 dollars traded). */
   notionalCents: number;
 }
 
@@ -23,7 +23,7 @@ export interface MetricsRow {
   spread: number | null;
   volume: number;
   vwap: number | null;
-  /** −1 … +1 */
+  /** -1..+1 */
   imbalance: number | null;
 }
 
@@ -38,7 +38,7 @@ export const emptyStats = (): InstrumentStats => ({
 });
 
 /**
- * Folds a flat batch `[instrument, price, qty, bid, ask, bidQty, askQty, …]` into `stats` in place.
+ * Folds a flat batch `[instrument, price, qty, bid, ask, bidQty, askQty, ...]` into `stats` in place.
  * Every trade is counted exactly once; book quantities only replace the latest snapshot.
  */
 export function applyBatch(stats: InstrumentStats[], batch: ArrayLike<number>): void {

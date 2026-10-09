@@ -2,7 +2,7 @@
 //!
 //! The JS host talks to it through a tiny C ABI (no wasm-bindgen):
 //! it owns an opaque `*mut Producer` handle and reads each batch straight
-//! out of linear memory as an `Int32Array` — no serialization.
+//! out of linear memory as an `Int32Array`, no serialization.
 //!
 //! Each update is `FIELDS` consecutive i32 values:
 //! `[instrument, priceCents, tradeQuantity, bidCents, askCents, bidQuantity, askQuantity]`.
@@ -13,7 +13,7 @@ const MIN_MID_CENTS: i64 = 100; // keep prices comfortably positive ($1 floor)
 const MAX_BOOK_QTY: i64 = 2_000;
 const MAX_TRADE_QTY: i64 = 100;
 
-/// xorshift64* — small, fast, deterministic for a given seed.
+/// xorshift64*: small, fast, deterministic for a given seed.
 struct Rng(u64);
 
 impl Rng {

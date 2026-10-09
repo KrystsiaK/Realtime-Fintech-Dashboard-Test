@@ -4,7 +4,7 @@ import { SYMBOLS } from './instruments';
 import type { ProducerCommand, ProducerEvent } from './producer.protocol';
 import { DEFAULT_SETTINGS, type ProducerSettings } from './settings';
 
-/** The subset of `Worker` the store uses — lets tests drive it with a fake. */
+/** The subset of `Worker` the store uses, so tests can drive it with a fake. */
 export type ProducerWorker = Pick<Worker, 'postMessage' | 'terminate' | 'onmessage' | 'onerror'>;
 
 export const PRODUCER_WORKER = new InjectionToken<() => ProducerWorker>('PRODUCER_WORKER', {

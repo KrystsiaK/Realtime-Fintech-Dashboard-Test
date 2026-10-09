@@ -242,8 +242,8 @@ describe('producer engine (worker logic)', () => {
 
       expect(instances).toHaveLength(2);
       const [trapped, fresh] = instances;
-      expect(trapped.generateCalls).toBe(2); // never touched again…
-      expect(trapped.freed).toEqual([]); // …not even to free into untrusted memory
+      expect(trapped.generateCalls).toBe(2); // not used after the trap
+      expect(trapped.freed).toEqual([]); // and not freed either
       expect(fresh.generateCalls).toBe(4);
       expect(lastSnapshot()).toMatchObject({ runId: 2, totalUpdates: 40 });
     });
