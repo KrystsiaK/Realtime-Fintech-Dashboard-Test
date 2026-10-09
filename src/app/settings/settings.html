@@ -1,0 +1,54 @@
+<form (submit)="apply($event)" novalidate class="mx-auto max-w-xl">
+  <h1 class="text-xl font-semibold tracking-tight text-zinc-100">Producer settings</h1>
+  <p class="mt-1 text-sm text-zinc-400">Changes take effect when you apply them. Applying starts a new run and clears all totals.</p>
+
+  <div class="mt-6 divide-y divide-white/5 rounded-xl border border-white/5 bg-zinc-900/40">
+    @for (f of fields; track f.key) {
+      @let field = form[f.key];
+      @let invalid = field().touched() && field().invalid();
+      <div class="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_12rem] sm:items-start">
+        <label [for]="f.key">
+          <span class="block text-sm font-medium text-zinc-100">{{ f.label }}</span>
+          <span class="block text-xs text-zinc-500">{{ f.hint }} · {{ limits[f.key].min }}–{{ limits[f.key].max }}</span>
+        </label>
+        <div>
+          <div class="relative">
+            <input
+              [id]="f.key"
+              type="number"
+              step="1"
+              inputmode="numeric"
+              [formField]="field"
+              [attr.aria-invalid]="invalid"
+              [attr.aria-describedby]="invalid ? f.key + '-error' : null"
+              class="w-full rounded-lg border bg-zinc-950 px-3 py-2 pr-10 text-right font-mono text-zinc-100 tabular-nums outline-none transition focus:ring-2"
+              [class]="invalid ? 'border-rose-500/60 focus:ring-rose-500/30' : 'border-white/10 focus:border-emerald-500/60 focus:ring-emerald-500/20'"
+            />
+            @if (f.unit) {
+              <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-zinc-500">{{ f.unit }}</span>
+            }
+          </div>
+          @if (invalid) {
+            <p [id]="f.key + '-error'" class="mt-1.5 text-xs text-rose-300">{{ field().errors()[0].message }}</p>
+          }
+        </div>
+      </div>
+    }
+  </div>
+
+  <div class="mt-4 flex flex-wrap items-center gap-3">
+    <p class="mr-auto text-sm text-zinc-400">
+      Nominal rate:
+      <span class="font-mono text-zinc-100 tabular-nums">{{ nominalRate() ?? '—' }}</span> updates/s across all instruments
+    </p>
+    <button type="button" (click)="resetToDefaults()" class="rounded-lg px-3 py-2 text-sm text-zinc-400 transition hover:text-zinc-100">
+      Defaults
+    </button>
+    <button
+      type="submit"
+      class="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+    >
+      Apply
+    </button>
+  </div>
+</form>

@@ -1,0 +1,70 @@
+@let settings = store.settings();
+<section class="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-white/5 bg-white/5 sm:grid-cols-4">
+  @for (
+    kpi of [
+      { label: 'Instruments', value: settings.instrumentCount | number },
+      { label: 'Updates processed', value: store.totalUpdates() | number },
+      { label: 'Nominal rate', value: (store.nominalRate() | number) + ' /s' },
+      { label: 'Batch', value: settings.updatesPerBatch + ' every ' + settings.batchIntervalMs + ' ms' },
+    ];
+    track kpi.label
+  ) {
+    <div class="bg-zinc-950/80 px-4 py-3">
+      <p class="text-xs font-medium uppercase tracking-wider text-zinc-500">{{ kpi.label }}</p>
+      <p class="mt-1 font-mono text-lg text-zinc-100 tabular-nums">{{ kpi.value }}</p>
+    </div>
+  }
+</section>
+
+<div class="overflow-x-auto rounded-xl border border-white/5 bg-zinc-900/40">
+  <table class="w-full min-w-[44rem] text-right text-sm">
+    <caption class="sr-only">Live market metrics per instrument</caption>
+    <thead class="border-b border-white/5 text-xs uppercase tracking-wider text-zinc-500">
+      <tr>
+        <th scope="col" class="px-4 py-3 text-left font-medium">Symbol</th>
+        <th scope="col" class="px-4 py-3 font-medium">Last</th>
+        <th scope="col" class="px-4 py-3 font-medium">Spread</th>
+        <th scope="col" class="px-4 py-3 font-medium">Volume</th>
+        <th scope="col" class="px-4 py-3 font-medium">VWAP</th>
+        <th scope="col" class="px-4 py-3 font-medium">Imbalance</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-white/5 font-mono tabular-nums">
+      @for (row of store.rows(); track row.symbol) {
+        <tr class="transition-colors hover:bg-white/[0.03]">
+          <th scope="row" class="px-4 py-2.5 text-left font-sans font-semibold text-zinc-100">{{ row.symbol }}</th>
+          <td
+            class="px-4 py-2.5"
+            [class.text-emerald-300]="row.lastPrice !== null && row.vwap !== null && row.lastPrice > row.vwap"
+            [class.text-rose-300]="row.lastPrice !== null && row.vwap !== null && row.lastPrice < row.vwap"
+          >
+            {{ row.lastPrice === null ? '—' : (row.lastPrice | currency: 'USD') }}
+          </td>
+          <td class="px-4 py-2.5 text-zinc-400">{{ row.spread === null ? '—' : (row.spread | currency: 'USD') }}</td>
+          <td class="px-4 py-2.5">{{ row.volume | number }}</td>
+          <td class="px-4 py-2.5">{{ row.vwap === null ? '—' : (row.vwap | currency: 'USD') }}</td>
+          <td class="px-4 py-2.5">
+            @if (row.imbalance === null) {
+              <span class="text-zinc-500">—</span>
+            } @else {
+              <div class="flex items-center justify-end gap-3">
+                <!-- Diverging bar: buy pressure grows right (green), sell pressure grows left (red). -->
+                <div class="relative hidden h-1.5 w-20 rounded-full bg-white/5 sm:block" aria-hidden="true">
+                  <div class="absolute inset-y-0 left-1/2 w-px bg-white/20"></div>
+                  <div
+                    class="absolute inset-y-0 rounded-full transition-all duration-300"
+                    [class]="row.imbalance >= 0 ? 'left-1/2 bg-emerald-400' : 'right-1/2 bg-rose-400'"
+                    [style.width.%]="(row.imbalance < 0 ? -row.imbalance : row.imbalance) * 50"
+                  ></div>
+                </div>
+                <span class="w-12" [class]="row.imbalance > 0 ? 'text-emerald-300' : row.imbalance < 0 ? 'text-rose-300' : ''">
+                  {{ row.imbalance > 0 ? '+' : '' }}{{ row.imbalance | number: '1.2-2' }}
+                </span>
+              </div>
+            }
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>

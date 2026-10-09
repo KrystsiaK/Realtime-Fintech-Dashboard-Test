@@ -1,0 +1,62 @@
+<header class="sticky top-0 z-10 border-b border-white/5 bg-zinc-950/70 backdrop-blur-xl">
+  <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 sm:px-6">
+    <a routerLink="/" class="flex items-center gap-2 font-semibold tracking-tight text-zinc-100">
+      <svg viewBox="0 0 24 24" class="size-6 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M3 17l5-6 4 4 8-10" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      Tickstream
+    </a>
+
+    <nav class="flex gap-1 rounded-lg bg-white/5 p-1 text-sm" aria-label="Main">
+      @for (item of nav; track item.path) {
+        <a
+          [routerLink]="item.path"
+          routerLinkActive="bg-white/10 text-zinc-100 shadow-sm"
+          [routerLinkActiveOptions]="{ exact: item.exact }"
+          ariaCurrentWhenActive="page"
+          class="rounded-md px-3 py-1.5 text-zinc-400 transition hover:text-zinc-100"
+          >{{ item.label }}</a
+        >
+      }
+    </nav>
+
+    <div class="ml-auto flex items-center gap-3">
+      @let s = statusStyle[store.status()];
+      <span role="status" class="flex items-center gap-2 text-sm font-medium" [class]="s.text">
+        <span class="size-2 rounded-full" [class]="s.dot"></span>
+        {{ s.label }}
+      </span>
+
+      @if (store.status() === 'paused') {
+        <button
+          type="button"
+          (click)="store.resume()"
+          class="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+        >
+          <svg viewBox="0 0 24 24" class="size-4" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" /></svg>
+          Resume
+        </button>
+      } @else {
+        <button
+          type="button"
+          (click)="store.pause()"
+          [disabled]="store.status() === 'error'"
+          class="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold text-zinc-100 transition hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <svg viewBox="0 0 24 24" class="size-4" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z" /></svg>
+          Pause
+        </button>
+      }
+    </div>
+  </div>
+</header>
+
+<main class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+  @if (store.error(); as error) {
+    <div role="alert" class="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+      <p class="font-semibold">Producer failed to start</p>
+      <p class="mt-1 text-rose-300/80">{{ error }}</p>
+    </div>
+  }
+  <router-outlet />
+</main>
